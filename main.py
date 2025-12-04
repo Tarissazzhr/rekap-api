@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
-from rekap_core import generate_rekap
+from rekap import generate_rekap
 import io
 
 app = FastAPI()
