@@ -1,24 +1,17 @@
-# Gunakan Python official image
 FROM python:3.11-slim
 
-# Set workdir
 WORKDIR /app
 
-# Install dependency system (openpyxl & pandas membutuhkan paket ini)
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
 COPY requirements.txt .
 
-# Install python packages
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy seluruh source code
 COPY . .
 
-# Railway memakai environment variable PORT,
-# jadi kita jalankan uvicorn di 0.0.0.0:$PORT
+# RUN command akan memanggil main:app (bukan app:app)
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
