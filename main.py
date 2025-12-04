@@ -1,18 +1,17 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional
 from rekap import generate_rekap
 import io
 
 app = FastAPI()
 
 # ================================
-# CORS (untuk Next.js atau domain lainnya)
+# CORS (untuk Next.js di Vercel)
 # ================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # boleh semua domain
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -22,40 +21,35 @@ app.add_middleware(
 async def root():
     return {"message": "Absensi API Ready!"}
 
-
 # ================================
-# ENDPOINT: /rekap
+# ENDPOINT /rekap — menerima 2 file
 # ================================
 @app.post("/rekap")
-async def rekap_absen(
-    absen_files: Optional[List[UploadFile]] = File(None),
-    cuti_files: Optional[List[UploadFile]] = File(None)
-):
-    """
-    Upload:
-        absen_files[]: Excel file absen
-        cuti_files[] : Excel file cuti (opsional)
+async def rekap(absensi: UploadFile, cuti: UploadFile):
 
-    Return:
-        File Excel Rekap (StreamingResponse)
-    """
+    # ====== Baca file absensi & cuti ======
+    absensi_bytes = io.BytesIO(await absensi.read())
+    cuti_bytes = io.BytesIO(await cuti.read())
 
-    # Convert file → byte stream untuk core engine
-    absen_streams = [io.BytesIO(await f.read()) for f in absen_files] if absen_files else []
-    cuti_streams = [io.BytesIO(await f.read()) for f in cuti_files] if cuti_files else []
+    # convert ke list stream karena engine kamu generate_rekap expects list
+    absen_streams = [absensi_bytes]
+    cuti_streams = [cuti_bytes]
 
-    # Generate Excel rekap
-    output = generate_rekap(absen_streams, cuti_streams)
+    # ====== Panggil engine rekap ======
+    output_stream = generate_rekap(absen_streams, cuti_streams)
 
-    if output is None:
+    if output_stream is None:
         return JSONResponse(
             status_code=400,
-            content={"error": "Tidak ada data absen valid di file yang diupload."}
+            content={"error": "File tidak valid atau tidak berisi data absen."}
         )
 
-    # Return file Excel
+    # Pastikan pointer file di awal
+    output_stream.seek(0)
+
+    # ====== RETURN FILE EXCEL ======
     return StreamingResponse(
-        output,
+        output_stream,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
             "Content-Disposition": "attachment; filename=rekap_absen.xlsx"
