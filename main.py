@@ -1,4 +1,3 @@
-# backend/main.py
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -7,10 +6,10 @@ import io
 
 app = FastAPI()
 
-# CORS supaya bisa diakses dari Next.js
+# ===== CORS supaya bisa diakses dari Next.js =====
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # atau masukkan URL frontend mu
+    allow_origins=["*"],  # bisa diganti dengan domain frontend kamu
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,11 +31,11 @@ async def rekap_absen(
     absen_file: UploadFile = File(...),
     cuti_file: UploadFile = File(...)
 ):
-    # Baca file Excel
+    # ===== Baca file =====
     absen = pd.read_excel(absen_file.file)
     cuti = pd.read_excel(cuti_file.file)
 
-    # Normalisasi NIK & Date
+    # ===== Normalisasi NIK & tanggal =====
     if not absen.empty:
         absen["Date"] = pd.to_datetime(absen["Date"], dayfirst=True, errors="coerce")
         absen["NIK"] = absen["NIK"].astype(str).str.strip()
@@ -48,7 +47,7 @@ async def rekap_absen(
     if absen.empty:
         return {"detail": "Tidak ada data absen untuk direkap."}
 
-    # Proses rekap
+    # ===== Semua tanggal dari absen =====
     min_date = absen["Date"].min()
     max_date = absen["Date"].max()
     all_dates = pd.date_range(start=min_date, end=max_date)
@@ -58,7 +57,7 @@ async def rekap_absen(
     wide = employees.copy()
     wide.insert(0, "No", range(1, len(wide)+1))
 
-    # MultiIndex columns
+    # ===== MultiIndex columns =====
     tuples = [("No", "", ""), ("NIK", "", ""), ("User Name", "", ""), ("Department", "", "")]
     for d in all_dates:
         tanggal = d.strftime("%d/%m/%Y")
@@ -72,14 +71,14 @@ async def rekap_absen(
     tuples.append(("Summary", "", "Reason Cuti"))
     multi_index = pd.MultiIndex.from_tuples(tuples)
 
-    # Buat dataframe hasil
+    # ===== Buat dataframe hasil =====
     result = pd.DataFrame(columns=multi_index)
     result[("No", "", "")] = wide["No"].values
     result[("NIK", "", "")] = wide["NIK"].values
     result[("User Name", "", "")] = wide["User Name"].values
     result[("Department", "", "")] = wide["Department"].values
 
-    # Isi absen
+    # ===== Isi absen =====
     for _, row in absen.iterrows():
         emp_id = row["NIK"]
         d = row["Date"]
@@ -95,7 +94,7 @@ async def rekap_absen(
         result.loc[result[("NIK", "", "")] == emp_id, (tanggal, hari, "In")] = in_time
         result.loc[result[("NIK", "", "")] == emp_id, (tanggal, hari, "Out")] = out_time
 
-    # Cuti
+    # ===== Cuti =====
     reason_dict = {}
     if not cuti.empty:
         for _, row in cuti.iterrows():
@@ -111,7 +110,7 @@ async def rekap_absen(
                 result.loc[idx, (tanggal, hari, "In")] = "Cuti"
                 result.loc[idx, (tanggal, hari, "Out")] = "Cuti"
 
-    # Summary
+    # ===== Summary =====
     jumlah_absen, tidak_absen, jumlah_cuti, reason_list = [], [], [], []
     in_cols = [col for col in result.columns if col[2]=="In"]
 
@@ -136,11 +135,13 @@ async def rekap_absen(
     result[("Summary", "", "Jumlah Cuti")] = jumlah_cuti
     result[("Summary", "", "Reason Cuti")] = reason_list
 
-    # Simpan Excel di memory
+    # ===== Simpan Excel di memory =====
     output = io.BytesIO()
     result.to_excel(output, index=True, sheet_name="Rekap")
     output.seek(0)
 
-    return StreamingResponse(output,
-                             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                             headers={"Content-Disposition": "attachment; filename=rekap.xlsx"})
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=rekap.xlsx"}
+    )
